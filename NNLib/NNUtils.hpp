@@ -20,7 +20,7 @@ namespace NN{
 template <typename T>
 typename std::enable_if<std::is_floating_point<T>::value, int>::type parseCSV(FILE *pFile, T *dest, uint_fast16_t dest_len)
 {
-    char num[30];
+    char num[40];
     char buff[NN_PARSECSV_BUFF_SIZE];
 
     if(pFile==NULL)
@@ -81,7 +81,7 @@ typename std::enable_if<std::is_floating_point<T>::value, int>::type parseCSV(FI
 template <typename T>
 typename std::enable_if<std::is_integral<T>::value, int>::type parseCSV(FILE *pFile, T *dest, uint_fast16_t dest_len)
 {
-    char num[20];
+    char num[30];
     char buff[NN_PARSECSV_BUFF_SIZE];
 
     if(pFile==NULL)
