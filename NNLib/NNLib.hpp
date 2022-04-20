@@ -327,6 +327,29 @@ class ConvLayer final : public GenericLayer<T>
         }
 };
 
+
+template<typename T = float>
+class SigmoidLayer final : public GenericLayer<T>
+{
+    private:
+        friend class Net<T>;
+    public:
+        SigmoidLayer() = delete;
+        SigmoidLayer(const uint16_t &layer_len) : GenericLayer<T>(layer_len, layer_len){};
+        SigmoidLayer(const uint16_t &layer_len, const std::shared_ptr<T> &input_block) : GenericLayer<T>(layer_len, input_block, layer_len){};
+        SigmoidLayer(const GenericLayer<T>* prev_layer) : GenericLayer<T>(prev_layer, prev_layer->getOutputSize()) {};
+        uint16_t getLayerLen() const {return this->_size_i;}
+
+        void compute() override
+        {
+            for (size_t i = 0; i < this->_size_i; i++)
+            {
+                this->_out.get()[i] = 1.0/(1.0+exp(-this->_in.get()[i]));
+            }
+        }
+};
+
+
 template<typename T>
 class Net
 {
@@ -471,13 +494,24 @@ class Net
             cptr->setKernel(kernel);
             cptr->setPadding(padding);
         }
-
         void addConvLayer(ConvKernel<T> kernel, ConvPadding padding = ConvPadding::VALID)
         {            
             dim_t dimensions{this->_input_size};
             addConvLayer(dimensions, kernel, padding);
         }
 
+        // Sigmoide
+        void addSigmoidLayer()
+        {
+            if (_layer_list.empty())
+            {
+                _layer_list.emplace_back(new SigmoidLayer<T>(_input_size, _in));
+            }
+            else
+            {
+                _layer_list.emplace_back(new SigmoidLayer<T>(_layer_list.back().get()));
+            }
+        }
 
         // Computar
         void compute()
