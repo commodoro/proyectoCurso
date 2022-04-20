@@ -118,6 +118,13 @@ struct NetError : public std::exception
         ss_msg << code;
         msg = ss_msg.str();
     }
+    NetError(OPCODE code, int layer, const char* id) : std::exception()
+    {
+        std::ostringstream ss_msg{std::ostringstream::ate};
+        ss_msg.str("Neural network runtime error. In layer: ");
+        ss_msg << layer << " [type:" << id << "]. " << code;
+        msg = ss_msg.str();
+    }
     std::string msg;
     const char* what() const noexcept {
         return msg.c_str();

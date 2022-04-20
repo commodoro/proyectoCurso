@@ -8,6 +8,7 @@
 #include <math.h>
 #include <type_traits>
 #include <vector>
+#include <iostream>
 
 namespace NN{
 
@@ -402,21 +403,21 @@ class ConvLayer final : public GenericLayer<T>
         {
             if(layer_dim.cols == 0 || layer_dim.rows == 0)
                 this->_code = OPCODE::BUILD_ERROR_2;
-            else if(this->code == OPCODE::OK)
+            else if(this->_code == OPCODE::OK)
                 this->_code = OPCODE::CONF_ERROR_0;
         };
         ConvLayer(const dim_t &layer_dim, const std::shared_ptr<T> &input_block) : _dim(layer_dim), GenericLayer<T>(layer_dim.cols*layer_dim.rows, input_block, layer_dim.cols*layer_dim.rows)
         {
             if(layer_dim.cols == 0 || layer_dim.rows == 0)
                 this->_code = OPCODE::BUILD_ERROR_2;
-            else if(this->code == OPCODE::OK)
+            else if(this->_code == OPCODE::OK)
                 this->_code = OPCODE::CONF_ERROR_0;
         }
         ConvLayer(const GenericLayer<T>* prev_layer, const dim_t layer_dim) : _dim(layer_dim), GenericLayer<T>(prev_layer, prev_layer->getOutputSize()) 
         {
             if(layer_dim.cols*layer_dim.rows != prev_layer->getOutputSize())
                 this->_code = OPCODE::BUILD_ERROR_2;
-            else if(this->code == OPCODE::OK)
+            else if(this->_code == OPCODE::OK)
                 this->_code = OPCODE::CONF_ERROR_0;
         };
 
@@ -440,7 +441,7 @@ class ConvLayer final : public GenericLayer<T>
         ConvKernel<T> getKernel() const {return _kernel;}
         void setPadding(ConvPadding padding)
         {
-            _padding = padding == ConvPadding::SAME;
+            _padding = padding;
         }
 
         void compute() override
@@ -572,7 +573,7 @@ class Net
             this->_out = std::move(net._out);
         }
 
-        void except_level(EXCEPLEVEL lv) {_exlv=lv};
+        void except_level(EXCEPLEVEL lv) {_exlv=lv;};
 
         // Lambda
         void addLambdaLayer(const uint16_t &output_len, std::function<void(T*, T*, uint16_t, uint16_t)> app)
@@ -742,6 +743,7 @@ class Net
         // Computar
         void compute()
         {
+            int n = 0;
             for(auto &layer: this->_layer_list)
             {
                 auto code = layer->code();
@@ -749,14 +751,15 @@ class Net
                 {
                 case EXCEPLEVEL::THROW_ALL:
                     if(code != OPCODE::OK)
-                        throw NetError(code);
+                        throw NetError(code, n, layer->id());
                     break;
                 case EXCEPLEVEL::CERR:
                     if(code != OPCODE::OK)
-                        std::cerr << code << std::endl;
+                        std::cerr << code << " in layer " << n << " [type:" << layer->id() << "]" << std::endl;
                     break;
                 }
                 layer->compute();
+                ++n;
             }
         }
 
@@ -768,6 +771,7 @@ class Net
         // Inicializar
         void init()
         {
+            int n = 0;
             for(auto &layer: this->_layer_list)
             {
                 auto code = layer->code();
@@ -775,13 +779,14 @@ class Net
                 {
                 case EXCEPLEVEL::THROW_ALL:
                     if(code != OPCODE::OK)
-                        throw NetError(code);
+                        throw NetError(code, n, layer->id());
                     break;
                 case EXCEPLEVEL::CERR:
                     if(code != OPCODE::OK)
-                        std::cerr << code << std::endl;
+                        std::cerr << code << " in layer " << n << " [type:" << layer->id() << "]" << std::endl;
                     break;
                 }
+                ++n;
             }
             _out = std::shared_ptr<T>{_layer_list.back()->_out};
             _output_size = _layer_list.back()->_size_o;
@@ -997,9 +1002,6 @@ Net<T> loadNet(const char* toml_filename)
     }
     return net;
 }
-
-
-
 
 }
 
