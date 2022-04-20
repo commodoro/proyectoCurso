@@ -111,6 +111,7 @@ std::ostream& operator<<(std::ostream& os, const OPCODE &code)
 
 struct NetError : public std::exception
 {
+    NetError() = delete;
     NetError(OPCODE code) : std::exception()
     {
         std::ostringstream ss_msg{std::ostringstream::ate};

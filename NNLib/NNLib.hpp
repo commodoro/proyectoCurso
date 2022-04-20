@@ -682,7 +682,16 @@ class Net
             {
                 if(dimensions.cols*dimensions.rows != this->_input_size)
                 {
-                    // Error
+                    switch (_exlv)
+                    {
+                    case EXCEPLEVEL::THROW_ALL:
+                        throw NetError(OPCODE::BUILD_ERROR_2);
+                        break;
+                    case EXCEPLEVEL::CERR:
+                        std::cerr << OPCODE::BUILD_ERROR_2 << std::endl;
+                    default:
+                        break;
+                    }
                     dimensions = Dimensions(this->_input_size);
                 }
                 _layer_list.emplace_back(new ConvLayer<T>(dimensions, _in));
@@ -691,7 +700,16 @@ class Net
             {
                 if(dimensions.cols*dimensions.rows != _layer_list.back()->_size_o)
                 {
-                    // Error
+                    switch (_exlv)
+                    {
+                    case EXCEPLEVEL::THROW_ALL:
+                        throw NetError(OPCODE::BUILD_ERROR_2);
+                        break;
+                    case EXCEPLEVEL::CERR:
+                        std::cerr << OPCODE::BUILD_ERROR_2 << std::endl;
+                    default:
+                        break;
+                    }
                     dimensions = Dimensions(_layer_list.back()->_size_o);
                 }
                 _layer_list.emplace_back(new ConvLayer<T>(_layer_list.back().get(),dimensions));
@@ -730,14 +748,12 @@ class Net
                 case EXCEPLEVEL::THROW_ALL:
                     if(code != OPCODE::OK)
                         throw NetError(code);
-                    layer->compute();
                     break;
                 case EXCEPLEVEL::CERR:
                     std::cerr << code << std::endl;
-                default:
-                    layer->compute();
                     break;
                 }
+                layer->compute();
             }
         }
 
@@ -760,6 +776,7 @@ class Net
                     break;
                 case EXCEPLEVEL::CERR:
                     std::cerr << code << std::endl;
+                    break;
                 }
             }
             _out = std::shared_ptr<T>{_layer_list.back()->_out};
