@@ -120,10 +120,20 @@ struct NetError : public std::exception
     }
     std::string msg;
     const char* what() const noexcept {
-        
         return msg.c_str();
     }
 };
+
+struct LoadError : public std::exception
+{
+    LoadError() = delete;
+    LoadError(std::string msg) : msg(msg), std::exception() {};
+    std::string msg;
+    const char* what() const noexcept {
+        return msg.c_str();
+    }
+};
+
 
 template <typename T>
 typename std::enable_if<std::is_floating_point<T>::value, int>::type parseCSV(FILE *pFile, T *dest, uint_fast16_t dest_len)

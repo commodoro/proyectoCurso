@@ -572,6 +572,8 @@ class Net
             this->_out = std::move(net._out);
         }
 
+        void except_level(EXCEPLEVEL lv) {_exlv=lv};
+
         // Lambda
         void addLambdaLayer(const uint16_t &output_len, std::function<void(T*, T*, uint16_t, uint16_t)> app)
         {
@@ -846,7 +848,7 @@ Net<T> loadNet(const char* toml_filename)
                 }
                 else
                 {
-                    // Error
+                    throw LoadError("Inconsistent interlayer dimensions.");
                     return net;
                 }
             } 
@@ -859,7 +861,7 @@ Net<T> loadNet(const char* toml_filename)
                 }
                 else
                 {
-                    // Error
+                    throw LoadError("Inconsistent interlayer dimensions.");
                     return net;
                 }
             }
@@ -879,7 +881,7 @@ Net<T> loadNet(const char* toml_filename)
                 }
                 else
                 {
-                    // Error
+                    throw LoadError("Inconsistent interlayer dimensions.");
                     return net;
                 }
             }
@@ -892,7 +894,7 @@ Net<T> loadNet(const char* toml_filename)
                 }
                 else
                 {
-                    // Error
+                    throw LoadError("Inconsistent interlayer dimensions.");
                     return net;
                 }
             }
@@ -909,7 +911,7 @@ Net<T> loadNet(const char* toml_filename)
                 }
                 else
                 {
-                    // Error
+                    throw LoadError("Inconsistent interlayer dimensions.");
                     return net;
                 }
             } 
@@ -922,7 +924,7 @@ Net<T> loadNet(const char* toml_filename)
                 }
                 else
                 {
-                    // Error
+                    throw LoadError("Inconsistent interlayer dimensions.");
                     return net;
                 }
             }
@@ -939,7 +941,7 @@ Net<T> loadNet(const char* toml_filename)
                 }
                 else
                 {
-                    // Error
+                    throw LoadError("Inconsistent interlayer dimensions.");
                     return net;
                 }
             } 
@@ -952,7 +954,7 @@ Net<T> loadNet(const char* toml_filename)
                 }
                 else
                 {
-                    // Error
+                    throw LoadError("Inconsistent interlayer dimensions.");
                     return net;
                 }
             }
@@ -969,7 +971,7 @@ Net<T> loadNet(const char* toml_filename)
                 }
                 else
                 {
-                    // Error
+                    throw LoadError("Inconsistent interlayer dimensions.");
                     return net;
                 }
             } 
@@ -982,7 +984,7 @@ Net<T> loadNet(const char* toml_filename)
                 }
                 else
                 {
-                    // Error
+                    throw LoadError("Inconsistent interlayer dimensions.");
                     return net;
                 }
             }
