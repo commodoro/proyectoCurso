@@ -51,7 +51,6 @@ enum class EXCEPLEVEL : char {
     THROW_ALL
 };
 
-
 std::ostream& operator<<(std::ostream& os, const OPCODE &code)
 {
     os << "[OPCODE]: ";

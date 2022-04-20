@@ -750,7 +750,8 @@ class Net
                         throw NetError(code);
                     break;
                 case EXCEPLEVEL::CERR:
-                    std::cerr << code << std::endl;
+                    if(code != OPCODE::OK)
+                        std::cerr << code << std::endl;
                     break;
                 }
                 layer->compute();
@@ -775,7 +776,8 @@ class Net
                         throw NetError(code);
                     break;
                 case EXCEPLEVEL::CERR:
-                    std::cerr << code << std::endl;
+                    if(code != OPCODE::OK)
+                        std::cerr << code << std::endl;
                     break;
                 }
             }
