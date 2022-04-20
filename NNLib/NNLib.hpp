@@ -24,6 +24,7 @@ class GenericLayer
     private:
         /* Solo se pueden crear dinámicamente dentro de la clase Net*/
         friend class Net<T>;
+        static const char _id[];
     protected:
         std::shared_ptr<T> _out;
         std::shared_ptr<T> _in;
@@ -54,6 +55,7 @@ class GenericLayer
         ~GenericLayer() = default;
 
         virtual void compute() {};
+        virtual const char* id() const {return _id;}
 
         T* getInputBlock() const {return _in.get();}
         T* getOutputBlock() const {return _out.get();}
@@ -69,6 +71,7 @@ class LambdaLayer : public GenericLayer<T>
     private:
         friend class Net<T>;
         std::function<void(T*, T*, uint16_t, uint16_t)> _app = [](T*, T*, uint16_t, uint16_t){};
+        static const char _id[];
     public:
         LambdaLayer() = delete;
         LambdaLayer(const uint16_t &input_len, const uint16_t &output_len) : GenericLayer<T>(input_len, output_len){}
@@ -80,6 +83,7 @@ class LambdaLayer : public GenericLayer<T>
         {
             _app(this->_in.get(), this->_out.get(), this->_size_i, this->_size_o);
         }
+        const char* id() const override {return this->_id;}
 };
 
 template<typename T = float>
@@ -87,28 +91,29 @@ class WGLayer final : public GenericLayer<T>
 {
     private:
         friend class Net<T>;
+        static const char _id[];
         std::unique_ptr<T> _W;
-        std::unique_ptr<T> _S;
+        std::unique_ptr<T> _B;
     public:
         WGLayer() = delete;
         WGLayer(const uint16_t &input_len, const uint16_t &output_len) : GenericLayer<T>(input_len, output_len){
-            this->_S = std::unique_ptr<T>{new T[this->_size_o]};
+            this->_B = std::unique_ptr<T>{new T[this->_size_o]};
             this->_W = std::unique_ptr<T>{new T[this->_size_i*this->_size_o]};
         }
         WGLayer(const uint16_t &input_len, const std::shared_ptr<T> &input_block, const uint16_t &output_len) : GenericLayer<T>(input_len, input_block, output_len){
-            this->_S = std::unique_ptr<T>{new T[this->_size_o]};
+            this->_B = std::unique_ptr<T>{new T[this->_size_o]};
             this->_W = std::unique_ptr<T>{new T[this->_size_i*this->_size_o]};
         };
         WGLayer(const uint16_t &layer_len, const std::shared_ptr<T> &input_block) :  WGLayer<T>(layer_len, input_block, layer_len) {};
         WGLayer(const GenericLayer<T> * prev_layer, const uint16_t output_len) : GenericLayer<T>(prev_layer, output_len) {
-            this->_S = std::unique_ptr<T>{new T[this->_size_o]};
+            this->_B = std::unique_ptr<T>{new T[this->_size_o]};
             this->_W = std::unique_ptr<T>{new T[this->_size_i*this->_size_o]};
         };
         void compute() override
         {
             for(uint_fast16_t i = 0; i<this->_size_o; ++i)
             {
-                this->_out.get()[i] = this->_S.get()[i];
+                this->_out.get()[i] = this->_B.get()[i];
                 for(uint_fast16_t j = 0; j < (this->_size_i); ++j)
                 {
                     this->_out.get()[i] += this->_W.get()[i*this->_size_i+j]*this->_in.get()[j];
@@ -117,8 +122,8 @@ class WGLayer final : public GenericLayer<T>
         }
         T* getWeights() const {return this->_W.get();}
         T* getMutWeights() {return this->_W.get();}
-        T* getBias() const {return this->_S.get();}
-        T* getMutBias() {return this->_S.get();}
+        T* getBias() const {return this->_B.get();}
+        T* getMutBias() {return this->_B.get();}
         uint16_t getWCols() const {return this->_size_i;}
         uint16_t getWRows() const {return this->_size_o;}
         void loadWeights(FILE* fptr)
@@ -127,7 +132,7 @@ class WGLayer final : public GenericLayer<T>
         }
         void loadBias(FILE* fptr)
         {
-            parseCSV(fptr, this->_S.get(), this->_size_o);
+            parseCSV(fptr, this->_B.get(), this->_size_o);
         }
         void loadWeights(const char* filename)
         {
@@ -137,18 +142,20 @@ class WGLayer final : public GenericLayer<T>
         {
             loadBias(fopen(filename, "r"));
         }
+        const char* id() const override {return this->_id;}
 };
 
 template<typename T = float>
-class ReLULayer final : public GenericLayer<T>
+class ReLuLayer final : public GenericLayer<T>
 {
     private:
         friend class Net<T>;
+        static const char _id[];
     public:
-        ReLULayer() = delete;
-        ReLULayer(const uint16_t &layer_len) : GenericLayer<T>(layer_len, layer_len){};
-        ReLULayer(const uint16_t &layer_len, const std::shared_ptr<T> &input_block) : GenericLayer<T>(layer_len, input_block, layer_len){};
-        ReLULayer(const GenericLayer<T> * prev_layer) : GenericLayer<T>(prev_layer, prev_layer->getOutputSize()) {};
+        ReLuLayer() = delete;
+        ReLuLayer(const uint16_t &layer_len) : GenericLayer<T>(layer_len, layer_len){};
+        ReLuLayer(const uint16_t &layer_len, const std::shared_ptr<T> &input_block) : GenericLayer<T>(layer_len, input_block, layer_len){};
+        ReLuLayer(const GenericLayer<T> * prev_layer) : GenericLayer<T>(prev_layer, prev_layer->getOutputSize()) {};
         uint16_t getLayerLen() const {return this->_size_i;}
         void compute() override
         {
@@ -157,6 +164,7 @@ class ReLULayer final : public GenericLayer<T>
                 this->_out.get()[i] = this->_in.get()[i] > 0? this->_in.get()[i] : 0;
             }
         }
+        const char* id() const override {return this->_id;}
 };
 
 template<typename T = float>
@@ -164,6 +172,7 @@ class NormLayer final : public GenericLayer<T>
 {
     private:
         friend class Net<T>;
+        static const char _id[];
         std::unique_ptr<T> _M;
         std::unique_ptr<T> _S;
     public:
@@ -213,6 +222,7 @@ class NormLayer final : public GenericLayer<T>
         {
             loadSD(fopen(filename, "r"));
         }
+        const char* id() const override {return this->_id;}
 };
 
 template<typename T = float>
@@ -220,6 +230,7 @@ class SoftMaxLayer final : public GenericLayer<T>
 {
     private:
         friend class Net<T>;
+        static const char _id[];
     public:
         SoftMaxLayer() = delete;
         SoftMaxLayer(const uint16_t &layer_len) : GenericLayer<T>(layer_len, layer_len){};
@@ -242,14 +253,15 @@ class SoftMaxLayer final : public GenericLayer<T>
                 this->_out.get()[i] = this->_out.get()[i]/eacc;
             }
         }
+        const char* id() const override {return this->_id;}
 };
-
 
 template<typename T = float>
 class ConvLayer final : public GenericLayer<T>
 {
     private:
         friend class Net<T>;
+        static const char _id[];
         ConvKernel<T> _kernel;
         dim_t _dim;
         bool _extend = false;
@@ -325,6 +337,7 @@ class ConvLayer final : public GenericLayer<T>
                 }
             }
         }
+        const char* id() const override {return this->_id;}
 };
 
 
@@ -333,6 +346,7 @@ class SigmoidLayer final : public GenericLayer<T>
 {
     private:
         friend class Net<T>;
+        static const char _id[];
     public:
         SigmoidLayer() = delete;
         SigmoidLayer(const uint16_t &layer_len) : GenericLayer<T>(layer_len, layer_len){};
@@ -347,8 +361,17 @@ class SigmoidLayer final : public GenericLayer<T>
                 this->_out.get()[i] = 1.0/(1.0+exp(-this->_in.get()[i]));
             }
         }
+        const char* id() const override {return this->_id;}
 };
 
+template<typename T> const char GenericLayer<T>::_id[] = "Generic";
+template<typename T> const char LambdaLayer<T>::_id[] = "Lambda";
+template<typename T> const char WGLayer<T>::_id[] = "WG";
+template<typename T> const char ReLuLayer<T>::_id[] = "ReLu";
+template<typename T> const char NormLayer<T>::_id[] = "Normalize";
+template<typename T> const char SoftMaxLayer<T>::_id[] = "SoftMax";
+template<typename T> const char ConvLayer<T>::_id[] = "Convolution";
+template<typename T> const char SigmoidLayer<T>::_id[] = "Sigmoid";
 
 template<typename T>
 class Net
@@ -356,7 +379,7 @@ class Net
     static_assert(std::is_floating_point<T>::value, "A Net class can only be instantiated with floating point types.");
     private:
         uint16_t _input_size, _output_size;
-        std::vector<std::unique_ptr<GenericLayer<T>>> _layer_list;
+        std::vector<std::shared_ptr<GenericLayer<T>>> _layer_list;
         std::shared_ptr<T> _in;
         std::shared_ptr<T> _out;
     public:
@@ -364,6 +387,13 @@ class Net
         Net(const uint16_t &input_len) : _input_size(input_len)
         {
             _in = std::shared_ptr<T>{new T[input_len]};
+        }
+        Net(const Net<T> &net) : _layer_list(std::move(net._layer_list))
+        {
+            this->_input_size = net._input_size;
+            this->_output_size = net._output_size;
+            this->_in = std::move(net._in);
+            this->_out = std::move(net._out);
         }
 
         // Lambda
@@ -448,11 +478,11 @@ class Net
         {
             if (_layer_list.empty())
             {
-                _layer_list.emplace_back(new ReLULayer<T>(_input_size, _in));
+                _layer_list.emplace_back(new ReLuLayer<T>(_input_size, _in));
             }
             else
             {
-                _layer_list.emplace_back(new ReLULayer<T>(_layer_list.back().get()));
+                _layer_list.emplace_back(new ReLuLayer<T>(_layer_list.back().get()));
             }
         }
 
@@ -550,7 +580,202 @@ class Net
         uint16_t getInputSize() const {return _input_size;};
         uint16_t getOutputSize() const {return _output_size;};
 
+        auto tail() const {return _layer_list.back();}
+        uint16_t n_layers() const {return _layer_list.size();}
+
 };
+
+
+template<typename T>
+Net<T> loadNet(const char* toml_filename)
+{
+    auto docdata = toml::parse(toml_filename);
+    auto& nn = toml::find(docdata, "NeuralNetwork");
+    uint16_t inputs = toml::find<std::uint16_t>(nn, "inputs");
+    uint16_t outputs = toml::find<std::uint16_t>(nn, "outputs");
+    
+    Net<T> net(inputs);
+
+    auto& layers_data = toml::find(docdata, "Layers");
+    uint16_t n_layers = toml::find<std::uint16_t>(layers_data, "size");
+    
+    uint16_t inlayer, outlayer, lenlayer; // Numer Layer Params 
+    std::string r1, r2; // Route Layer Params 
+    for (uint16_t i = 0; i < n_layers; i++)
+    {
+        char txt[5];
+        sprintf(txt, "%d", (int)i);
+        auto layer = toml::find(layers_data, txt);
+        std::string type = toml::find<std::string>(layer, "type");
+        
+        if (type == "Normalize")
+        {
+            lenlayer = toml::find<std::uint16_t>(layer, "len");
+            r1 = toml::find<std::string>(layer, "means");
+            r2 = toml::find<std::string>(layer, "sd");
+            if(net.n_layers() > 0)
+            {
+                if (net.tail()->getOutputSize() == lenlayer)
+                {
+                    // Ok
+                    net.addNormLayer(r1.c_str(), r2.c_str());
+                }
+                else
+                {
+                    // Error
+                    return net;
+                }
+            } 
+            else
+            {
+                if (net.getInputSize() == lenlayer)
+                {
+                    // Ok
+                    net.addNormLayer(r1.c_str(), r2.c_str());
+                }
+                else
+                {
+                    // Error
+                    return net;
+                }
+            }
+        } 
+        else if  (type == "WG") 
+        {
+            inlayer = toml::find<std::uint16_t>(layer, "inputs");
+            outlayer = toml::find<std::uint16_t>(layer, "outputs");
+            r1 = toml::find<std::string>(layer, "weights");
+            r2 = toml::find<std::string>(layer, "bias");
+            if(net.n_layers() > 0)
+            {
+                if (net.tail()->getOutputSize() == inlayer)
+                {
+                    // Ok
+                    net.addWGLayer(outlayer, r1.c_str(), r2.c_str());
+                }
+                else
+                {
+                    // Error
+                    return net;
+                }
+            }
+            else
+            {
+                if (net.getInputSize() == inlayer)
+                {
+                    // Ok
+                    net.addWGLayer(outlayer, r1.c_str(), r2.c_str());
+                }
+                else
+                {
+                    // Error
+                    return net;
+                }
+            }
+        }
+        else if (type == "ReLu")
+        {
+            lenlayer = toml::find<std::uint16_t>(layer, "len");
+            if(net.n_layers() > 0)
+            {
+                if (net.tail()->getOutputSize() == lenlayer)
+                {
+                    // Ok
+                    net.addReLuLayer();
+                }
+                else
+                {
+                    // Error
+                    return net;
+                }
+            } 
+            else
+            {
+                if (net.getInputSize() == lenlayer)
+                {
+                    // Ok
+                    net.addReLuLayer();
+                }
+                else
+                {
+                    // Error
+                    return net;
+                }
+            }
+        }
+        else if (type == "SoftMax")
+        {
+            lenlayer = toml::find<std::uint16_t>(layer, "len");
+            if(net.n_layers() > 0)
+            {
+                if (net.tail()->getOutputSize() == lenlayer)
+                {
+                    // Ok
+                    net.addSoftMaxLayer();
+                }
+                else
+                {
+                    // Error
+                    return net;
+                }
+            } 
+            else
+            {
+                if (net.getInputSize() == lenlayer)
+                {
+                    // Ok
+                    net.addSoftMaxLayer();
+                }
+                else
+                {
+                    // Error
+                    return net;
+                }
+            }
+        }
+        else if (type == "Sigmoid")
+        {
+            lenlayer = toml::find<std::uint16_t>(layer, "len");
+            if(net.n_layers() > 0)
+            {
+                if (net.tail()->getOutputSize() == lenlayer)
+                {
+                    // Ok
+                    net.addSigmoidLayer();
+                }
+                else
+                {
+                    // Error
+                    return net;
+                }
+            } 
+            else
+            {
+                if (net.getInputSize() == lenlayer)
+                {
+                    // Ok
+                    net.addSigmoidLayer();
+                }
+                else
+                {
+                    // Error
+                    return net;
+                }
+            }
+        } 
+        else 
+        {
+            // Error, capa no soportada
+            return net;
+        }
+        
+
+    }
+    return net;
+}
+
+
+
 
 }
 

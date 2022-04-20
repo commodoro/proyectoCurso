@@ -5,6 +5,8 @@
 #include <cinttypes>
 #include <fstream>
 #include <iterator>
+#include <string>
+#include "./libs/toml11/toml.hpp"
 
 #define NN_BUFF_SIZE_FS_REISERFS 4096
 #define NN_BUFF_SIZE_FS_EXT3_1K 1024

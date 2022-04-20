@@ -1,0 +1,41 @@
+[NeuralNetwork]
+
+inputs = 4
+outputs = 3
+
+[Layers]
+
+size = 5
+
+[Layers.0]
+
+type = "Normalize"
+len = 4
+means = "./data/means.csv"
+sd = "./data/sd.csv"
+
+[Layers.1]
+
+type = "WG"
+inputs = 4
+outputs = 8
+weights = "./data/w1.csv"
+bias = "./data/b1.csv"
+
+[Layers.2]
+
+type = "ReLu"
+len = 8
+
+[Layers.3]
+
+type = "WG"
+inputs = 8
+outputs = 3
+weights = "./data/w2.csv"
+bias = "./data/b2.csv"
+
+[Layers.4]
+
+type = "SoftMax"
+len = 3
