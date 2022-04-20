@@ -11,10 +11,6 @@
 
 namespace NN{
 
-enum class OPCODE : uint8_t {
-    OK
-};
-
 template<typename T = float> class Net;
 
 template<typename T = float>    
@@ -29,28 +25,36 @@ class GenericLayer
         std::shared_ptr<T> _out;
         std::shared_ptr<T> _in;
         uint16_t _size_i, _size_o;
+        OPCODE _code;
     public:
-        GenericLayer() = default;
-        // GenericLayer(const GenericLayer& other)
-        // {
-        //     _in = other._in;
-        //     _out = other._out;
-        //     _size_i = other._size_i;
-        //     _size_o = other._size_o;
-        // };
+        GenericLayer() = delete;
         GenericLayer(const uint16_t &input_len, const uint16_t &output_len) : _size_i(input_len), _size_o(output_len)
         {
             _in = std::shared_ptr<T>{new T[input_len]};
             _out = std::shared_ptr<T>{new T[output_len]};
+            if(input_len > 0 && output_len > 0)
+                _code = OPCODE::OK;
+            else
+                _code = OPCODE::BUILD_ERROR_0;
         };
         GenericLayer(const uint16_t &input_len, const std::shared_ptr<T> &input_block, const uint16_t &output_len) : _size_i(input_len), _size_o(output_len), _in(input_block)
         {
             _out = std::shared_ptr<T>{new T[output_len]};
+            if(input_len > 0 && output_len > 0)
+                _code = OPCODE::OK;
+            else
+                _code = OPCODE::BUILD_ERROR_0;
         };
         GenericLayer(const uint16_t &input_len, const std::shared_ptr<T> &input_block) : GenericLayer(input_len, input_block, input_len) {};
         GenericLayer(const GenericLayer<T> * prev_layer, const uint16_t output_len) : _size_i(prev_layer->_size_o), _size_o(output_len), _in(prev_layer->_out)
         {
             _out = std::shared_ptr<T>{new T[output_len]};
+            if(prev_layer->code() != OPCODE::OK)
+                _code = OPCODE::BUILD_ERROR_0;
+            else if(output_len == 0)
+                _code = OPCODE::BUILD_ERROR_1;
+            else 
+                _code = OPCODE::OK;
         };
         ~GenericLayer() = default;
 
@@ -61,8 +65,11 @@ class GenericLayer
         T* getOutputBlock() const {return _out.get();}
         T* getMutInputBlock() {return _in.get();}
 
-        uint16_t getInputSize() const {return _size_i;};
-        uint16_t getOutputSize() const {return _size_o;};
+        uint16_t getInputSize() const {return _size_i;}
+        uint16_t getOutputSize() const {return _size_o;}
+        
+        OPCODE code() const {return _code;}
+        void clear() {_code = OPCODE::OK;}
 };
 
 template<typename T = float>
@@ -81,7 +88,20 @@ class LambdaLayer : public GenericLayer<T>
         void setApp(std::function<void(T*, T*, uint16_t, uint16_t)> app) {_app = app;}
         void compute() override
         {
-            _app(this->_in.get(), this->_out.get(), this->_size_i, this->_size_o);
+            if(this->_code != OPCODE::OK)
+            {
+                this->_code = OPCODE::OP_ERROR_0;
+                return;
+            }
+            if(_app)
+            {
+                _app(this->_in.get(), this->_out.get(), this->_size_i, this->_size_o);
+                this->_code = OPCODE::OK;
+            }
+            else
+            {
+                this->_code = OPCODE::OP_ERROR_1;
+            }
         }
         const char* id() const override {return this->_id;}
 };
@@ -111,6 +131,11 @@ class WGLayer final : public GenericLayer<T>
         };
         void compute() override
         {
+            if(this->_code != OPCODE::OK)
+            {
+                this->_code = OPCODE::OP_ERROR_0;
+                return;
+            }
             for(uint_fast16_t i = 0; i<this->_size_o; ++i)
             {
                 this->_out.get()[i] = this->_B.get()[i];
@@ -128,11 +153,55 @@ class WGLayer final : public GenericLayer<T>
         uint16_t getWRows() const {return this->_size_o;}
         void loadWeights(FILE* fptr)
         {
-            parseCSV(fptr, this->_W.get(), this->_size_i*this->_size_o);
+            int ret = parseCSV(fptr, this->_W.get(), this->_size_i*this->_size_o);
+            switch (ret)
+            {
+            case -1:
+                this->_code = OPCODE::PARS_ERROR_0;
+                break;
+            case -2:
+                this->_code = OPCODE::PARS_ERROR_1;
+                break;
+            case -3:
+                this->_code = OPCODE::PARS_ERROR_2;
+                break;
+            case -4:
+                this->_code = OPCODE::PARS_ERROR_3;
+                break;
+            case 0:
+                break;
+            default:
+                #ifndef NN_NO_WARNINGS
+                this->_code = OPCODE::WARN_0;
+                #endif
+                break;
+            }
         }
         void loadBias(FILE* fptr)
         {
-            parseCSV(fptr, this->_B.get(), this->_size_o);
+            int ret = parseCSV(fptr, this->_B.get(), this->_size_o);
+            switch (ret)
+            {
+            case -1:
+                this->_code = OPCODE::PARS_ERROR_0;
+                break;
+            case -2:
+                this->_code = OPCODE::PARS_ERROR_1;
+                break;
+            case -3:
+                this->_code = OPCODE::PARS_ERROR_2;
+                break;
+            case -4:
+                this->_code = OPCODE::PARS_ERROR_3;
+                break;
+            case 0:
+                break;
+            default:
+                #ifndef NN_NO_WARNINGS
+                this->_code = OPCODE::WARN_0;
+                #endif
+                break;
+            }
         }
         void loadWeights(const char* filename)
         {
@@ -159,6 +228,11 @@ class ReLuLayer final : public GenericLayer<T>
         uint16_t getLayerLen() const {return this->_size_i;}
         void compute() override
         {
+            if(this->_code != OPCODE::OK)
+            {
+                this->_code = OPCODE::OP_ERROR_0;
+                return;
+            }
             for (size_t i = 0; i < this->_size_i; i++)
             {
                 this->_out.get()[i] = this->_in.get()[i] > 0? this->_in.get()[i] : 0;
@@ -191,11 +265,16 @@ class NormLayer final : public GenericLayer<T>
         };
         void compute() override
         {
+            if(this->_code != OPCODE::OK)
+            {
+                this->_code = OPCODE::OP_ERROR_0;
+                return;
+            }
             for (size_t i = 0; i < this->_size_i; i++)
             {
                 if (this->_S.get()[i] == 0)
                 {
-                    // Aquí tendría que poner un flag de erorr.
+                    this->_code = OPCODE::OP_ERROR_2;
                     continue;
                 }
                 this->_out.get()[i] = (this->_in.get()[i]-this->_M.get()[i])/this->_S.get()[i];
@@ -208,11 +287,55 @@ class NormLayer final : public GenericLayer<T>
         uint16_t getLayerLen() const {return this->_size_i;}
         void loadMeans(FILE* fptr)
         {
-            parseCSV(fptr, this->_M.get(), this->_size_i);
+            int ret = parseCSV(fptr, this->_M.get(), this->_size_i);
+            switch (ret)
+            {
+            case -1:
+                this->_code = OPCODE::PARS_ERROR_0;
+                break;
+            case -2:
+                this->_code = OPCODE::PARS_ERROR_1;
+                break;
+            case -3:
+                this->_code = OPCODE::PARS_ERROR_2;
+                break;
+            case -4:
+                this->_code = OPCODE::PARS_ERROR_3;
+                break;
+            case 0:
+                break;
+            default:
+                #ifndef NN_NO_WARNINGS
+                this->_code = OPCODE::WARN_0;
+                #endif
+                break;
+            }
         }
         void loadSD(FILE* fptr)
         {
-            parseCSV(fptr, this->_S.get(), this->_size_o);
+            int ret = parseCSV(fptr, this->_S.get(), this->_size_o);
+            switch (ret)
+            {
+            case -1:
+                this->_code = OPCODE::PARS_ERROR_0;
+                break;
+            case -2:
+                this->_code = OPCODE::PARS_ERROR_1;
+                break;
+            case -3:
+                this->_code = OPCODE::PARS_ERROR_2;
+                break;
+            case -4:
+                this->_code = OPCODE::PARS_ERROR_3;
+                break;
+            case 0:
+                break;
+            default:
+                #ifndef NN_NO_WARNINGS
+                this->_code = OPCODE::WARN_0;
+                #endif
+                break;
+            }
         }
         void loadMeans(const char* filename)
         {
@@ -240,6 +363,11 @@ class SoftMaxLayer final : public GenericLayer<T>
         
         void compute() override
         {
+            if(this->_code != OPCODE::OK)
+            {
+                this->_code = OPCODE::OP_ERROR_0;
+                return;
+            }
             T eacc = 0;
             for (size_t i = 0; i < this->_size_i; i++)
             {
@@ -247,7 +375,10 @@ class SoftMaxLayer final : public GenericLayer<T>
                 eacc += this->_out.get()[i];
             }
             if (eacc == 0)
-                return; // Debería dar un error.
+            {
+                this->_code = OPCODE::OP_ERROR_2;
+                return;
+            }
             for (size_t i = 0; i < this->_size_i; i++)
             {
                 this->_out.get()[i] = this->_out.get()[i]/eacc;
@@ -264,23 +395,62 @@ class ConvLayer final : public GenericLayer<T>
         static const char _id[];
         ConvKernel<T> _kernel;
         dim_t _dim;
-        bool _extend = false;
+        ConvPadding _padding = ConvPadding::VALID;
     public:
         ConvLayer() = delete;
-        ConvLayer(const dim_t &layer_dim) : _dim(layer_dim), GenericLayer<T>(layer_dim.cols*layer_dim.rows, layer_dim.cols*layer_dim.rows){};
-        ConvLayer(const dim_t &layer_dim, const std::shared_ptr<T> &input_block) : _dim(layer_dim), GenericLayer<T>(layer_dim.cols*layer_dim.rows, input_block, layer_dim.cols*layer_dim.rows) {}
-        ConvLayer(const GenericLayer<T>* prev_layer, const dim_t layer_dim) : _dim(layer_dim), GenericLayer<T>(prev_layer, prev_layer->getOutputSize()) {/*Error si dim =/= size */};
+        ConvLayer(const dim_t &layer_dim) : _dim(layer_dim), GenericLayer<T>(layer_dim.cols*layer_dim.rows, layer_dim.cols*layer_dim.rows)
+        {
+            if(layer_dim.cols == 0 || layer_dim.rows == 0)
+                this->_code = OPCODE::BUILD_ERROR_2;
+            else if(this->code == OPCODE::OK)
+                this->_code = OPCODE::CONF_ERROR_0;
+        };
+        ConvLayer(const dim_t &layer_dim, const std::shared_ptr<T> &input_block) : _dim(layer_dim), GenericLayer<T>(layer_dim.cols*layer_dim.rows, input_block, layer_dim.cols*layer_dim.rows)
+        {
+            if(layer_dim.cols == 0 || layer_dim.rows == 0)
+                this->_code = OPCODE::BUILD_ERROR_2;
+            else if(this->code == OPCODE::OK)
+                this->_code = OPCODE::CONF_ERROR_0;
+        }
+        ConvLayer(const GenericLayer<T>* prev_layer, const dim_t layer_dim) : _dim(layer_dim), GenericLayer<T>(prev_layer, prev_layer->getOutputSize()) 
+        {
+            if(layer_dim.cols*layer_dim.rows != prev_layer->getOutputSize())
+                this->_code = OPCODE::BUILD_ERROR_2;
+            else if(this->code == OPCODE::OK)
+                this->_code = OPCODE::CONF_ERROR_0;
+        };
 
         uint16_t getLayerLen() const {return this->_size_i;}
-        void setKernel(const ConvKernel<T> &kernel) {this->_kernel = kernel;}
+        void setKernel(const ConvKernel<T> &kernel) 
+        {
+            if(this->_code == OPCODE::CONF_ERROR_0)
+            {
+                this->_code = OPCODE::OK;
+            }
+            if (kernel.cols() == 0 || kernel.rows() == 0)
+            {
+                this->_code = OPCODE::CONF_ERROR_1;
+            }
+            if (kernel.data == nullptr)
+            {
+                this->_code = OPCODE::CONF_ERROR_2;
+            }
+            this->_kernel = kernel;
+        }
         ConvKernel<T> getKernel() const {return _kernel;}
         void setPadding(ConvPadding padding)
         {
-            _extend = padding == ConvPadding::SAME;
+            _padding = padding == ConvPadding::SAME;
         }
 
         void compute() override
         {
+            if(this->_code != OPCODE::OK)
+            {
+                this->_code = OPCODE::OP_ERROR_0;
+                return;
+            }
+
             uint16_t i0 = this->_kernel.rows()/2;
             uint16_t j0 = this->_kernel.cols()/2;
             uint16_t iend = this->_dim.rows - i0;
@@ -304,7 +474,7 @@ class ConvLayer final : public GenericLayer<T>
                     } 
                     else // Bordes
                     {
-                        if (this->_extend) // SAME
+                        if (this->_padding == ConvPadding::SAME) // SAME
                         {
                             if(i >= iend) // Borde inferior
                             {
@@ -356,6 +526,11 @@ class SigmoidLayer final : public GenericLayer<T>
 
         void compute() override
         {
+            if(this->_code != OPCODE::OK)
+            {
+                this->_code = OPCODE::OP_ERROR_0;
+                return;
+            }
             for (size_t i = 0; i < this->_size_i; i++)
             {
                 this->_out.get()[i] = 1.0/(1.0+exp(-this->_in.get()[i]));
@@ -382,6 +557,7 @@ class Net
         std::vector<std::shared_ptr<GenericLayer<T>>> _layer_list;
         std::shared_ptr<T> _in;
         std::shared_ptr<T> _out;
+        EXCEPLEVEL _exlv = EXCEPLEVEL::THROW_ALL;
     public:
         Net() = delete;
         Net(const uint16_t &input_len) : _input_size(input_len)
@@ -547,8 +723,24 @@ class Net
         void compute()
         {
             for(auto &layer: this->_layer_list)
-                layer->compute();
+            {
+                auto code = layer->code();
+                switch (_exlv)
+                {
+                case EXCEPLEVEL::THROW_ALL:
+                    if(code != OPCODE::OK)
+                        throw NetError(code);
+                    layer->compute();
+                    break;
+                case EXCEPLEVEL::CERR:
+                    std::cerr << code << std::endl;
+                default:
+                    layer->compute();
+                    break;
+                }
+            }
         }
+
         void operator()()
         {
             this->compute();
@@ -557,6 +749,19 @@ class Net
         // Inicializar
         void init()
         {
+            for(auto &layer: this->_layer_list)
+            {
+                auto code = layer->code();
+                switch (_exlv)
+                {
+                case EXCEPLEVEL::THROW_ALL:
+                    if(code != OPCODE::OK)
+                        throw NetError(code);
+                    break;
+                case EXCEPLEVEL::CERR:
+                    std::cerr << code << std::endl;
+                }
+            }
             _out = std::shared_ptr<T>{_layer_list.back()->_out};
             _output_size = _layer_list.back()->_size_o;
         }
@@ -768,8 +973,6 @@ Net<T> loadNet(const char* toml_filename)
             // Error, capa no soportada
             return net;
         }
-        
-
     }
     return net;
 }

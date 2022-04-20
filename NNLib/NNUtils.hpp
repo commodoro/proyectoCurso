@@ -7,6 +7,9 @@
 #include <iterator>
 #include <string>
 #include "./libs/toml11/toml.hpp"
+#include <exception>
+#include <sstream>
+
 
 #define NN_BUFF_SIZE_FS_REISERFS 4096
 #define NN_BUFF_SIZE_FS_EXT3_1K 1024
@@ -20,7 +23,107 @@
 #define NN_PARSECSV_BUFF_SIZE NN_PARSECSV_BUFF_USER_SIZE // Default
 #endif
 
+#define NN_NO_WARNINGS // Comment to enable warns
+
 namespace NN{
+
+enum class OPCODE : uint16_t {
+    OK,
+    WARN_0 = 20, //  // Sobran datos en el fichero que han sido descartados
+    BUILD_ERROR_0 = 100, // Tamaño de entrada/salida menor que 1.
+    BUILD_ERROR_1, // Error con la capa sobre la que se pretende construir.
+    BUILD_ERROR_2, // Dimensiones incoherentes.
+    OP_ERROR_0 = 200, // Operación no permitida porque el estado actual no es OK.
+    OP_ERROR_1, // La función lambda no está asignada
+    OP_ERROR_2, // División por cero en la operación.
+    CONF_ERROR_0 = 300, // Sin kernel.
+    CONF_ERROR_1, // Dimensiones del kernel inconsistentes.
+    CONF_ERROR_2, // El puntero del kernel no apunta a ningún bloque de memoria.
+    PARS_ERROR_0 = 400, // Fichero no encontrado
+    PARS_ERROR_1,  // Error al abrir fichero.
+    PARS_ERROR_2,   // Fichero vacío
+    PARS_ERROR_3    // Faltan datos
+};
+
+enum class EXCEPLEVEL : char {
+    ZERO = 0,
+    CERR,
+    THROW_ALL
+};
+
+
+std::ostream& operator<<(std::ostream& os, const OPCODE &code)
+{
+    os << "[OPCODE]: ";
+    switch (code)
+    {
+    case OPCODE::OK:
+        os << "Normal operation. No error.";
+        break;
+    case OPCODE::WARN_0:
+        os << "There is excess data in the file that has been discarded.";
+        break;
+    case OPCODE::BUILD_ERROR_0:
+        os << "Input/output size less than 1.";
+        break;
+    case OPCODE::BUILD_ERROR_1:
+        os << "Error with the layer on which it is intended to build.";
+        break;
+    case OPCODE::BUILD_ERROR_2:
+        os << "Inconsistent dimensions.";
+        break;
+    case OPCODE::OP_ERROR_0:
+        os << "Operation not allowed because the current state is not OK.";
+        break;
+    case OPCODE::OP_ERROR_1:
+        os << "Lambda function is not assigned.";
+        break;
+    case OPCODE::OP_ERROR_2:
+        os << "Division by zero in the operation.";
+        break;
+    case OPCODE::CONF_ERROR_0:
+        os << "Kernel not configured.";
+        break;
+    case OPCODE::CONF_ERROR_1:
+        os << "Inconsistent kernel dimensions.";
+        break;
+    case OPCODE::CONF_ERROR_2:
+        os << "The kernel pointer does not point to any memory blocks.";
+        break;
+    case OPCODE::PARS_ERROR_0:
+        os << "File not found;";
+        break;
+    case OPCODE::PARS_ERROR_1:
+        os << "Error opening file.";
+        break;
+    case OPCODE::PARS_ERROR_2:
+        os << "Empty file.";
+        break;
+    case OPCODE::PARS_ERROR_3:
+        os << "Missing data in the file.";
+        break;
+    default:
+        os << "Unknow code.";
+        break;
+    }
+    return os;
+}
+
+struct NetError : public std::exception
+{
+    NetError(OPCODE code) : std::exception()
+    {
+        std::ostringstream ss_msg{std::ostringstream::ate};
+        ss_msg.str("Neural network runtime error. ");
+        ss_msg << code;
+        msg = ss_msg.str();
+    }
+    std::string msg;
+    const char* what() const noexcept {
+        
+        return msg.c_str();
+    }
+};
 
 template <typename T>
 typename std::enable_if<std::is_floating_point<T>::value, int>::type parseCSV(FILE *pFile, T *dest, uint_fast16_t dest_len)
