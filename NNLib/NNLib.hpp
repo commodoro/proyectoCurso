@@ -1,3 +1,6 @@
+#ifndef __NN_NNLIB__
+#define __NN_NNLIB__
+
 #include <memory>
 #include <functional>
 #include <cstdio>
@@ -73,7 +76,8 @@ class LambdaLayer : public GenericLayer<T>
         LambdaLayer(const uint16_t &input_len, const std::shared_ptr<T> &input_block) :  GenericLayer<T>(input_len, input_block, input_len) {};
         LambdaLayer(const GenericLayer<T> * prev_layer, const uint16_t output_len) : GenericLayer<T>(prev_layer, output_len) {};
         void setApp(std::function<void(T*, T*, uint16_t, uint16_t)> app) {_app = app;}
-        void compute() {
+        void compute() override
+        {
             _app(this->_in.get(), this->_out.get(), this->_size_i, this->_size_o);
         }
 };
@@ -100,7 +104,8 @@ class WGLayer final : public GenericLayer<T>
             this->_S = std::unique_ptr<T>{new T[this->_size_o]};
             this->_W = std::unique_ptr<T>{new T[this->_size_i*this->_size_o]};
         };
-        void compute() {
+        void compute() override
+        {
             for(uint_fast16_t i = 0; i<this->_size_o; ++i)
             {
                 this->_out.get()[i] = this->_S.get()[i];
@@ -145,7 +150,7 @@ class ReLULayer final : public GenericLayer<T>
         ReLULayer(const uint16_t &layer_len, const std::shared_ptr<T> &input_block) : GenericLayer<T>(layer_len, input_block, layer_len){};
         ReLULayer(const GenericLayer<T> * prev_layer) : GenericLayer<T>(prev_layer, prev_layer->getOutputSize()) {};
         uint16_t getLayerLen() const {return this->_size_i;}
-        void compute()
+        void compute() override
         {
             for (size_t i = 0; i < this->_size_i; i++)
             {
@@ -219,10 +224,10 @@ class SoftMaxLayer final : public GenericLayer<T>
         SoftMaxLayer() = delete;
         SoftMaxLayer(const uint16_t &layer_len) : GenericLayer<T>(layer_len, layer_len){};
         SoftMaxLayer(const uint16_t &layer_len, const std::shared_ptr<T> &input_block) : GenericLayer<T>(layer_len, input_block, layer_len){};
-        SoftMaxLayer(const GenericLayer<T> * prev_layer) : GenericLayer<T>(prev_layer, prev_layer->getOutputSize()) {};
+        SoftMaxLayer(const GenericLayer<T>* prev_layer) : GenericLayer<T>(prev_layer, prev_layer->getOutputSize()) {};
         uint16_t getLayerLen() const {return this->_size_i;}
         
-        void compute()
+        void compute() override
         {
             T eacc = 0;
             for (size_t i = 0; i < this->_size_i; i++)
@@ -235,6 +240,89 @@ class SoftMaxLayer final : public GenericLayer<T>
             for (size_t i = 0; i < this->_size_i; i++)
             {
                 this->_out.get()[i] = this->_out.get()[i]/eacc;
+            }
+        }
+};
+
+
+template<typename T = float>
+class ConvLayer final : public GenericLayer<T>
+{
+    private:
+        friend class Net<T>;
+        ConvKernel<T> _kernel;
+        dim_t _dim;
+        bool _extend = false;
+    public:
+        ConvLayer() = delete;
+        ConvLayer(const dim_t &layer_dim) : _dim(layer_dim), GenericLayer<T>(layer_dim.cols*layer_dim.rows, layer_dim.cols*layer_dim.rows){};
+        ConvLayer(const dim_t &layer_dim, const std::shared_ptr<T> &input_block) : _dim(layer_dim), GenericLayer<T>(layer_dim.cols*layer_dim.rows, input_block, layer_dim.cols*layer_dim.rows) {}
+        ConvLayer(const GenericLayer<T>* prev_layer, const dim_t layer_dim) : _dim(layer_dim), GenericLayer<T>(prev_layer, prev_layer->getOutputSize()) {/*Error si dim =/= size */};
+
+        uint16_t getLayerLen() const {return this->_size_i;}
+        void setKernel(const ConvKernel<T> &kernel) {this->_kernel = kernel;}
+        ConvKernel<T> getKernel() const {return _kernel;}
+        void setPadding(ConvPadding padding)
+        {
+            _extend = padding == ConvPadding::SAME;
+        }
+
+        void compute() override
+        {
+            uint16_t i0 = this->_kernel.rows()/2;
+            uint16_t j0 = this->_kernel.cols()/2;
+            uint16_t iend = this->_dim.rows - i0;
+            uint16_t jend = this->_dim.cols - j0;
+
+            for (size_t i = 0; i < this->_dim.rows; i++)
+            {
+                for (size_t j = 0; j < this->_dim.cols; j++)
+                {
+                    if((i >= i0) && (i < iend) && (j >= j0) && (j < jend))
+                    {
+                        T calc = 0;
+                        for (size_t ki = 0; ki < this->_kernel.rows(); ki++)
+                        {
+                            for (size_t kj = 0; kj < this->_kernel.cols(); kj++)
+                            {
+                                calc += this->_in.get()[this->_dim.rows*(i-i0+ki)+(j-j0+kj)] * this->_kernel.data[this->_kernel.rows()*ki+kj];
+                            }
+                        }
+                        this->_out.get()[this->_dim.rows*i+j] = calc;
+                    } 
+                    else // Bordes
+                    {
+                        if (this->_extend) // SAME
+                        {
+                            if(i >= iend) // Borde inferior
+                            {
+                                if (i != j)
+                                    this->_out.get()[this->_dim.rows*i+j] = this->_in.get()[this->_dim.rows*(iend-1)+j];
+                                else
+                                    this->_out.get()[this->_dim.rows*i+j] = this->_in.get()[this->_dim.rows*(iend-1)+(jend-1)];
+                            }
+                            else if (i < i0) // Borde superior
+                            {
+                                if (i != j)
+                                    this->_out.get()[this->_dim.rows*i+j] = this->_in.get()[this->_dim.rows*i0+j];
+                                else
+                                    this->_out.get()[this->_dim.rows*i+j] = this->_in.get()[this->_dim.rows*i0+j0];
+                            }
+                            else if (j >= jend) // Borde derecho
+                            {
+                                this->_out.get()[this->_dim.rows*i+j] = this->_in.get()[this->_dim.rows*i+(jend-1)];
+                            }
+                            else // Borde izquierdo
+                            {
+                                this->_out.get()[this->_dim.rows*i+j] = this->_in.get()[this->_dim.rows*i+j0];
+                            }
+                        }
+                        else // VALID
+                        {
+                            this->_out.get()[this->_dim.rows*i+j] = 0;
+                        }
+                    }
+                }
             }
         }
 };
@@ -358,6 +446,38 @@ class Net
             }
         }
 
+        // Convolve
+        void addConvLayer(dim_t dimensions, ConvKernel<T> kernel, ConvPadding padding = ConvPadding::VALID)
+        {            
+            if (_layer_list.empty())
+            {
+                if(dimensions.cols*dimensions.rows != this->_input_size)
+                {
+                    // Error
+                    dimensions = Dimensions(this->_input_size);
+                }
+                _layer_list.emplace_back(new ConvLayer<T>(dimensions, _in));
+            }
+            else
+            {
+                if(dimensions.cols*dimensions.rows != _layer_list.back()->_size_o)
+                {
+                    // Error
+                    dimensions = Dimensions(_layer_list.back()->_size_o);
+                }
+                _layer_list.emplace_back(new ConvLayer<T>(_layer_list.back().get(),dimensions));
+            }
+            auto cptr = dynamic_cast<ConvLayer<T>*>(_layer_list.back().get());
+            cptr->setKernel(kernel);
+            cptr->setPadding(padding);
+        }
+
+        void addConvLayer(ConvKernel<T> kernel, ConvPadding padding = ConvPadding::VALID)
+        {            
+            dim_t dimensions{this->_input_size};
+            addConvLayer(dimensions, kernel, padding);
+        }
+
 
         // Computar
         void compute()
@@ -377,9 +497,14 @@ class Net
             _output_size = _layer_list.back()->_size_o;
         }
 
-        void copy2input(const T* first)
+        // Copiar entrada/salida
+        void copy2input(const T* origin)
         {
-            std::copy(first, first+_input_size, _in.get());
+            std::copy(origin, origin+_input_size, _in.get());
+        }
+        void copyout(T* dest)
+        {
+            std::copy(_out.get(), _out.get()+_output_size, dest);
         }
 
         // Block memory
@@ -394,3 +519,5 @@ class Net
 };
 
 }
+
+#endif

@@ -1,3 +1,6 @@
+#ifndef __NN_NNUTILS__
+#define __NN_NNUTILS__
+
 #include <type_traits>
 #include <cinttypes>
 #include <fstream>
@@ -139,4 +142,33 @@ typename std::enable_if<std::is_integral<T>::value, int>::type parseCSV(FILE *pF
     return n;
 }
 
+typedef struct Dimensions
+{
+    uint16_t rows, cols;
+    Dimensions(uint16_t c, uint16_t r=1) : rows(r), cols(c) {};
+} dim_t;
+
+template<typename T = float>
+struct ConvKernel
+{
+    private:
+        uint16_t _size;
+        dim_t _dim;
+    public:
+        T* data;
+        ConvKernel() : _dim(0,0), _size(0) {};
+        ConvKernel(dim_t dim) : _dim(dim), _size(dim.cols*dim.rows){};
+        ConvKernel(dim_t dim, T* data_ptr) : _dim(dim), _size(dim.cols*dim.rows), data(data_ptr) {};
+        uint16_t rows() const {return _dim.rows;}
+        uint16_t cols() const {return _dim.cols;}
+        uint16_t size() const {return _size;}
+};
+
+enum class ConvPadding : char
+{
+    VALID, SAME
+};
+
 }
+
+#endif
